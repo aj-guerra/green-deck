@@ -1,0 +1,136 @@
+---
+title: "GreenDeck Ratings"
+author: "Aaron Guerra"
+date: "12/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(reshape2)
+library(data.table)
+library(ggpmisc)
+library(ggpubr)
+```
+
+```{r}
+gd <- read.csv("C:/Users/aaron/Desktop/Colab Notebooks/GreenDeckReseach_dailymeans.csv")
+View(gd)
+gd$Timestamp = mdy(gd$Timestamp)
+
+```
+
+```{r}
+gdm <- melt(gd, id.vars = 'Timestamp')
+gdm.overall <- dplyr::filter(gdm, grepl('overall', variable))
+gd.means <- gdm %>% group_by(variable) %>% summarise(mean = mean(value,na.rm = TRUE))
+gd.o.means <- gd.means[gd.means$variable %like% 'overall',]
+```
+
+```{r}
+start_dates21 <- as.Date(c("6/1/21", "3/1/21", "6/1/21", "4/1/21", "8/1/21", "2/1/21", "1/1/21", "6/1/21", "3/1/21", "5/1/21", "6/1/21", "2/1/21"), "%m/%d/%y")
+start_dates22 <- as.Date(c("6/1/22", "3/1/22", "6/1/22", "4/1/22", "8/1/22", "2/1/22", "1/1/22", "6/1/22", "3/1/22", "5/1/22", "6/1/22", "2/1/22"), "%m/%d/%y")
+end_dates21 <- as.Date(c("8/31/21", "8/31/21", "7/31/21", "8/31/21", "10/31/21", "4/30/21", "12/31/21", "7/31/21", "5/31/21", "7/31/21", "7/31/21", "9/30/21"), "%m/%d/%y")
+end_dates22 <- as.Date(c("8/31/22", "8/31/22", "7/31/22", "8/31/22", "10/31/22", "4/30/22", "12/31/22", "7/31/22", "5/31/22", "7/31/22", "7/31/22", "9/30/22"), "%m/%d/%y")
+
+plants <- c('am','as','bg','cp','eu','ec','fc','fi','mb','mv','pm','sb') #TODO: MAKE ALL VARIABLE NAMES UNIQUE IN ORIGINAL DOCUMENT
+
+gd.p <- setNames(as.list(rep(NA, length(plants))), plants) #create empty df with keys = plant names
+
+df.sd <- as.data.frame(cbind(start_dates21,start_dates22))
+row.names(df.sd) <- plants
+
+df.ed <- as.data.frame(cbind(end_dates21,end_dates22))
+row.names(df.ed) <- plants
+
+for (i in plants) {
+  gd.p[[i]] <- gdm[gdm$variable %like% i,]
+}
+
+for (i in plants) {
+  n <- match(i,plants)
+  start_date21 <- start_dates21[i]
+  end_date21 <- end_dates21[i]
+  start_date22 <- start_dates22[i]
+  end_date22 <- end_dates22[i]
+  gd.p[[i]] <- gd.p[[i]][which(gd.p[[i]][,1] >= start_dates21[n] & gd.p[[i]][,1] <= end_dates21[n] |
+                        gd.p[[i]][,1] >= start_dates22[n] & gd.p[[i]][,1] <= end_dates22[n]  ), ]
+}
+
+gdm.b <- bind_rows(gd.p)
+gdm.b.overall <- dplyr::filter(gdm.b, grepl('overall', variable))
+gd.b.means <- gdm.b %>% group_by(variable) %>% summarise(mean = mean(value,na.rm = TRUE))
+gd.b.o.means <- gd.b.means[gd.b.means$variable %like% 'overall',]
+```
+
+#Unweighted Mean
+```{r}
+means.plot <- gd.o.means
+
+means.plot$variable<-gsub(".overall","",as.character(means.plot$variable)) #repalace .overal w/ nothing
+means.plot$variable<- toupper(means.plot$variable)
+means.plot <- means.plot %>% arrange(-mean)
+
+means.plot$vfull <- c('Achilea milleolium', 'Asclepias Speciosa', 'Bouteloua gracilis', 'Carex pansa', 'Eschscholzia californica', 'Eriogonum umbellatum', 'Festuca  californica', 'Festuca idahoensis', 'Mimulus bifidus', 'Monardella villosa', 'Penstomon "Margarita BOP"', 'Sisyrinchium bellum')
+
+ggplot(means.plot, aes(reorder(variable, -mean), mean)) +
+  geom_col(fill = 'darkgreen') +
+  geom_hline(aes(yintercept=4))+
+  labs(x = 'Species', y = 'Yearly Overall Appearence ', title = "Entire Year Overall Appearence Means")
+
+```
+# Weighted Overall Mean
+```{r}
+means.plot <- gd.b.o.means
+
+means.plot$variable<-gsub(".overall","",as.character(means.plot$variable)) #repalace .overal w/ nothing
+means.plot$variable<- toupper(means.plot$variable)
+means.plot <- means.plot %>% arrange(-mean)
+
+means.plot$vfull <- c('Achilea milleolium', 'Asclepias Speciosa', 'Bouteloua gracilis', 'Carex pansa', 'Eschscholzia californica', 'Eriogonum umbellatum', 'Festuca  californica', 'Festuca idahoensis', 'Mimulus bifidus', 'Monardella villosa', 'Penstomon "Margarita BOP"', 'Sisyrinchium bellum')
+
+ggplot(means.plot, aes(reorder(variable, -mean), mean)) +
+  geom_col(fill = 'darkgreen') +
+  geom_hline(aes(yintercept=4))+
+  labs(x = 'Species', y = 'Yearly Overall Mean', title = "Blooming Season Overall Appearence Means")
+
+```
+
+
+```{r}
+ggplot(gdm.overall, aes(Timestamp, value)) +
+  geom_line() +
+  stat_smooth() +
+  geom_hline(aes(yintercept=4), color = 'darkblue')+
+  facet_wrap(~variable) +
+  labs(title = 'Yearly Trend')
+```
+
+
+```{r}
+ggplot(gdm.overall) +
+  geom_line(data=gdm.overall, aes(Timestamp, value), color = 'black') +
+  geom_line(data=gdm.b.overall, aes(Timestamp, value), color = 'red') +
+  
+  geom_hline(aes(yintercept=4), color = 'darkblue')+
+  facet_wrap(~variable) +
+  labs(title = 'Yearly Readings with Bloom Season Highlighted')
+```
+
+```{r}
+ggplot(gdm.overall) +
+  geom_line(data=gdm.overall, aes(Timestamp, value), color = 'black') +
+  stat_smooth(data=gdm.overall, aes(Timestamp, value), color = 'black') +
+  geom_line(data=gdm.b.overall, aes(Timestamp, value), color = 'red') +
+  
+  geom_hline(aes(yintercept=4), color = 'darkblue')+
+  facet_wrap(~variable) +
+  labs(title = 'Yearly Trend with Bloom Season Highlighted')
+```
+
+
