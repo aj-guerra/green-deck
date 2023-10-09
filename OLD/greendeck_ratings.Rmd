@@ -14,21 +14,19 @@ library(tidyverse)
 library(lubridate)
 library(reshape2)
 library(data.table)
-library(ggpmisc)
-library(ggpubr)
+#library(ggpmisc)
+#library(ggpubr)
 ```
 
 ```{r}
-gd <- read.csv("C:/Users/aaron/Desktop/Colab Notebooks/GreenDeckReseach_dailymeans.csv")
-View(gd)
-gd$Timestamp = mdy(gd$Timestamp)
+gd <- read.csv("/home/aaron/Documents/WORK/GREEN_DECK/gd-evals-clean-2.csv")
+gd$Timestamp = ymd(gd$Timestamp)
+gd<- gd %>%  rename(variable=Rating.Category, value = Rating)
 
 ```
 
 ```{r}
-gdm <- melt(gd, id.vars = 'Timestamp')
-gdm.overall <- dplyr::filter(gdm, grepl('overall', variable))
-gd.means <- gdm %>% group_by(variable) %>% summarise(mean = mean(value,na.rm = TRUE))
+gd.means <- gd %>% group_by(Species, variable) %>% summarise(mean = mean(value,na.rm = TRUE))
 gd.o.means <- gd.means[gd.means$variable %like% 'overall',]
 ```
 
@@ -38,20 +36,20 @@ start_dates22 <- as.Date(c("6/1/22", "3/1/22", "6/1/22", "4/1/22", "8/1/22", "2/
 end_dates21 <- as.Date(c("8/31/21", "8/31/21", "7/31/21", "8/31/21", "10/31/21", "4/30/21", "12/31/21", "7/31/21", "5/31/21", "7/31/21", "7/31/21", "9/30/21"), "%m/%d/%y")
 end_dates22 <- as.Date(c("8/31/22", "8/31/22", "7/31/22", "8/31/22", "10/31/22", "4/30/22", "12/31/22", "7/31/22", "5/31/22", "7/31/22", "7/31/22", "9/30/22"), "%m/%d/%y")
 
-plants <- c('am','as','bg','cp','eu','ec','fc','fi','mb','mv','pm','sb') #TODO: MAKE ALL VARIABLE NAMES UNIQUE IN ORIGINAL DOCUMENT
+plants <- c('Am','As','B','Cp','Eu','Ec','Fc','Fi','Mb','Mv','P','Sb') #TODO: MAKE ALL VARIABLE NAMES UNIQUE IN ORIGINAL DOCUMENT
 
 gd.p <- setNames(as.list(rep(NA, length(plants))), plants) #create empty df with keys = plant names
 
-df.sd <- as.data.frame(cbind(start_dates21,start_dates22))
+df.sd <- as.data.frame(cbind(start_dates21,start_dates22)) #start date
 row.names(df.sd) <- plants
 
-df.ed <- as.data.frame(cbind(end_dates21,end_dates22))
+df.ed <- as.data.frame(cbind(end_dates21,end_dates22)) # end date
 row.names(df.ed) <- plants
 
 for (i in plants) {
-  gd.p[[i]] <- gdm[gdm$variable %like% i,]
+  gd.p[[i]] <- gd[gd$Species %like% i,]
 }
-
+ 
 for (i in plants) {
   n <- match(i,plants)
   start_date21 <- start_dates21[i]
