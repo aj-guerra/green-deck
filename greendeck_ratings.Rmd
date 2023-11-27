@@ -13,18 +13,20 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(lubridate)
-library(reshape2)
 library(data.table)
-#library(ggpmisc)
-#library(ggpubr)
 ```
 
 ```{r}
 gd <- read.csv("gd-evals-clean-2.csv")
 gd$Timestamp = parse_date_time(gd$Timestamp, c("mdy HMS", "mdy"))
-gd$Timestamp = as.POSIXct(gd$Timestamp)
-gd <- gd %>%  rename(variable=Rating.Category, value = Rating)
-
+gd$Timestamp = as.POSIXct(gd$Timestamp) # convert timestamp
+gd <- gd %>%  rename(variable=Rating.Category, value = Rating) #rename variables
+gd <- gd %>% # resassign Bh to B and Ph to P'
+  mutate(Species = case_when(
+    Species == "B" ~ "Bg",
+    Species == "P'" ~ "Ph",
+    TRUE ~ Species))
+unique(gd$Species)
 ```
 
 ```{r}
@@ -33,24 +35,24 @@ gd_o_means <- gd_means %>% filter(variable == "Overall Appearance")
 ```
 
 ```{r}
-start_dates <- c("6/1", "3/1", "6/1", "4/1", "8/1", "2/1", "1/1", "6/1", "3/1", "5/1", "6/1", "2/1")
-start_dates21 <- strptime(paste0(start_dates, "/21"), "%m/%d/%y")
-start_dates22 <- strptime(paste0(start_dates, "/22"), "%m/%d/%y")
-start_dates23 <- strptime(paste0(start_dates, "/23"), "%m/%d/%y")
+start_dates <- c("4/1", "6/1", "6/1", "4/1", "2/1", "8/1", "2/1", "6/1", "3/1", "6/1", "5/1", "3/1")
+start_dates21 <- as.POSIXct(strptime(paste0(start_dates, "/21"), "%m/%d/%y"))
+start_dates22 <- as.POSIXct(strptime(paste0(start_dates, "/22"), "%m/%d/%y"))
+start_dates23 <- as.POSIXct(strptime(paste0(start_dates, "/23"), "%m/%d/%y"))
 
-end_dates <- c("8/31", "8/31", "7/31", "8/31", "10/31", "4/30", "12/31", "7/31", "5/31", "7/31", "7/31", "9/30")
-end_dates21 <- strptime(paste0(end_dates, "/21"), "%m/%d/%y")
-end_dates22 <- strptime(paste0(end_dates, "/22"), "%m/%d/%y")
-end_dates23 <- strptime(paste0(end_dates, "/23"), "%m/%d/%y")
+end_dates <- c("8/31", "7/31", "7/31", "7/31", "9/30", "10/31", "4/30", "7/31", "8/31", "8/31", "7/31", "5/31")
+end_dates21 <- as.POSIXct(strptime(paste0(end_dates, "/21"), "%m/%d/%y"))
+end_dates22 <- as.POSIXct(strptime(paste0(end_dates, "/22"), "%m/%d/%y"))
+end_dates23 <- as.POSIXct(strptime(paste0(end_dates, "/23"), "%m/%d/%y"))
 
-plants <- c('Am', 'As', 'B', 'Cp', 'Eu', 'Ec', 'Fc', 'Fi', 'Mb', 'Mv', 'P', 'Sb') #TODO: MAKE ALL VARIABLE NAMES UNIQUE IN ORIGINAL DOCUMENT
+plants <- c('Am', 'As', 'B', 'Cp', 'Eu', 'Ec', 'Fc', 'Fi', 'Mb', 'Mv', 'P', 'Sb') 
 
 gd_p <- setNames(as.list(rep(NA, length(plants))), plants) #create empty df with keys = plant names
 
-df_sd <- as.data.frame(cbind(start_dates21,start_dates22)) #start date
+df_sd <- as.data.frame(cbind(start_dates21, start_dates22, start_dates23)) #start date
 row.names(df_sd) <- plants
 
-df_ed <- as.data.frame(cbind(end_dates21,end_dates22)) # end date
+df_ed <- as.data.frame(cbind(end_dates21, end_dates22, end_dates23)) # end date
 row.names(df_ed) <- plants
 
 for (i in plants) {
@@ -67,7 +69,7 @@ for (i in seq_along(plants)) {
 
 gd_b <- bind_rows(gd_p2)
 gd_b_overall <- dplyr::filter(gd_b, grepl('Overall Appearance', variable))
-gd_b_means <- gdm_b %>% group_by(Species, variable) %>% summarise(mean = mean(value,na.rm = TRUE))
+gd_b_means <- gd_b %>% group_by(Species, variable) %>% summarise(mean = mean(value,na.rm = TRUE))
 gd_b_overall_means <- gd_b_means[gd_b_means$variable %like% 'Overall Appearance',]
 ```
 
@@ -80,40 +82,50 @@ for (i in seq_along(plants)) {
 
 #Unweighted Mean
 ```{r}
-means_plot <- gd_o_means
-means_plot <- means_plot %>% arrange(-mean)
+uw_plotting <- gd_o_means
 
-means_plot$vfull <- c('Achilea milleolium', 
+uw_plotting$vfull <- c('Achilea milleolium', 
                       'Asclepias Speciosa',
                       'Bouteloua gracilis',
                       'Carex pansa',
-                      'Eschscholzia californica',
                       'Eriogonum umbellatum',
-                      'Festuca  californica',
+                      'Eschscholzia californica',
+                      'Festuca californica',
                       'Festuca idahoensis',
                       'Mimulus bifidus',
                       'Monardella villosa',
                       'Penstomon Margarita BOP',
                       'Sisyrinchium bellum')
 
-ggplot(means_plot, aes(reorder(Species, -mean), mean)) +
-  geom_col(fill = 'darkgreen') +
-  geom_hline(aes(yintercept=4))+
-  labs(x = 'Species', y = 'Yearly Overall Appearence ', title = "Entire Year Overall Appearence Means")
+uw_plotting <- uw_plotting %>% arrange(-mean)
+
+# color assignment
+uw_plotting$color_bin <- cut(uw_plotting$mean,
+                            breaks = c(0, 3, 3.5, 4, 5),
+                            labels = c("low", "medium-low", "medium-high", "high"),
+                            right = TRUE)
+color_palette <- c("#d11141", "#f37735", "#ffc425", "#00b159")
+uw_plotting$color <- color_palette[as.numeric(uw_plotting$color_bin)]
+
+uw_plot <- ggplot(uw_plotting, aes(reorder(Species, -mean), mean)) +
+  geom_col(fill = uw_plotting$color) +
+  ylim(0,5) +
+  labs(x = 'Species',
+       y = 'Mean Overall Appearance')+
+  theme_linedraw()
 
 ```
 
 # Weighted Overall Mean
 ```{r}
-means_plot_b <- gd_b_overall_means
-means_plot_b <- means_plot_b %>% arrange(-mean)
+w_plotting <- gd_b_overall_means
 
-means_plot_b$vfull <- c('Achilea milleolium', 
+w_plotting$vfull <- c('Achilea milleolium', 
                       'Asclepias Speciosa',
                       'Bouteloua gracilis',
                       'Carex pansa',
-                      'Eschscholzia californica',
                       'Eriogonum umbellatum',
+                      'Eschscholzia californica',
                       'Festuca  californica',
                       'Festuca idahoensis',
                       'Mimulus bifidus',
@@ -121,49 +133,42 @@ means_plot_b$vfull <- c('Achilea milleolium',
                       'Penstomon Margarita BOP',
                       'Sisyrinchium bellum')
 
-ggplot(means_plot_b, aes(reorder(Species, -mean), mean)) +
-  geom_col(fill = 'darkgreen') +
-  geom_hline(aes(yintercept=4))+
-  labs(x = 'Species', y = 'Yearly Overall Mean', title = "Blooming Season Overall Appearence Means")
+w_plotting <- w_plotting %>% arrange(-mean)
+
+w_plotting$color_bin <- cut(w_plotting$mean,
+                            breaks = c(0, 3, 3.5, 4, 5),
+                            labels = c("low", "medium-low", "medium-high", "high"),
+                            right = TRUE)
+w_plotting$color <- color_palette[as.numeric(w_plotting$color_bin)]
+
+w_plot <- ggplot(w_plotting, aes(reorder(Species, -mean), mean)) +
+  geom_col(fill = w_plotting$color) +
+  ylim(0,5) +
+  labs(x = 'Species',
+       y = 'Mean Overall Appearance') +
+  theme_linedraw()
 
 ```
 
-
 ```{r}
-# Time series for all season 
-ggplot(gd, aes(Timestamp, value)) +
+# Time series for all season
+time_series <- ggplot(gd, aes(Timestamp, value)) +
+  geom_hline(aes(yintercept=3), color = color_palette[2]) +
+  geom_hline(aes(yintercept=3.5), color = color_palette[3]) +
+  geom_hline(aes(yintercept=4), color = color_palette[4]) +
   stat_smooth() +
-  geom_hline(aes(yintercept=4), color = 'darkblue')+
   facet_wrap(~Species) +
-  labs(title = 'Yearly Trend')
+  theme_linedraw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(y = 'Mean Overall Appearance', x = 'Date')
 ```
 
 ```{r}
-ggplot(gd_b_overall, aes(Timestamp, value)) +
-  stat_smooth() +
-  geom_hline(aes(yintercept=4), color = 'darkblue')+
-  facet_wrap(~Species) +
-  labs(title = 'Yearly Trend')
-```
+if (!dir.exists("figs")) {
+  dir.create("figs")
+}
 
-
-```{r}
-ggplot(gdm.overall) +
-  geom_line(data=gdm.overall, aes(Timestamp, value), color = 'black') +
-  geom_line(data=gdm.b.overall, aes(Timestamp, value), color = 'red') +
-  
-  geom_hline(aes(yintercept=4), color = 'darkblue')+
-  facet_wrap(~variable) +
-  labs(title = 'Yearly Readings with Bloom Season Highlighted')
-```
-
-```{r}
-ggplot(gdm.overall) +
-  geom_line(data=gdm.overall, aes(Timestamp, value), color = 'black') +
-  stat_smooth(data=gdm.overall, aes(Timestamp, value), color = 'black') +
-  geom_line(data=gdm.b.overall, aes(Timestamp, value), color = 'red') +
-  
-  geom_hline(aes(yintercept=4), color = 'darkblue')+
-  facet_wrap(~variable) +
-  labs(title = 'Yearly Trend with Bloom Season Highlighted')
+ggsave("figs/unweighted_means.png", uw_plot, width = 7.5, height = 4, units = 'in')
+ggsave("figs/weighted_means.png", w_plot, width = 7.5, height = 4, units = 'in')
+ggsave("figs/time_series.png", time_series, width = 7.5, height = 6, units = 'in')
 ```
